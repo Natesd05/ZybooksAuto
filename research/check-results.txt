@@ -1,0 +1,10 @@
+Source: Google-distributed ZyBooks Auto v1.0 content.js
+Package SHA-256: 74dee9e412c59ffb24b242c329de1eedfde6b2013f2882d22d0941899619e6bb
+Run date: 2026-09-13
+Command: node research/check-original.mjs /tmp/zybooks-auto-audit/content.js
+
+CONFIRMED: zero detected status elements returns complete=true.
+CONFIRMED: two solveAll commands register four intervals; none is cleared.
+CONFIRMED: MCQ routine clicks every supplied radio and leaves its timer registered after exhaustion.
+CONFIRMED: empty status scan allows repeated next clicks without destination confirmation.
+4/4 mock checks passed. These establish source behavior, not live-site compatibility.
