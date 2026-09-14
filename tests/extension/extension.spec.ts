@@ -303,3 +303,46 @@ test('production package loads but cannot execute synthetic selectors', async ()
   expect(state.items[0]?.state).toBe('unsupported');
   expect(await page.locator('body').getAttribute('data-clicked')).toBeNull();
 });
+
+test('production package recognizes live boundaries and runs through real extension events', async () => {
+  const { liveActivity, liveBehavior } = await import('../fixtures/live');
+  const body =
+    '<!doctype html><main>' +
+    liveActivity('1', 'animation') +
+    liveActivity('2', 'single_choice') +
+    liveActivity('3', 'single_choice', true) +
+    liveActivity('4', 'animation', true) +
+    liveActivity('5', 'single_choice', true) +
+    '</main><script>' +
+    liveBehavior +
+    '</script>';
+  await page.route('https://learn.zybooks.com/**', (route) =>
+    route.fulfill({ contentType: 'text/html', body }),
+  );
+  await page.goto('https://learn.zybooks.com/zybook/demo/chapter/1/section/1');
+  const worker = context.serviceWorkers()[0]!;
+  await expect
+    .poll(() =>
+      worker.evaluate(async () => !!(await chrome.storage.session.get('checkpoint')).checkpoint),
+    )
+    .toBe(true);
+  panel = await context.newPage();
+  await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+  await expect(panel.getByRole('heading', { name: 'Section 1.1', exact: true })).toBeVisible();
+  await panel.getByLabel('Pause when the connected tab is hidden').uncheck();
+  await panel.getByRole('button', { name: 'Start run' }).click();
+  await finished();
+  const state = await snapshot();
+  expect(state.compatible).toBe(true);
+  expect(state.items).toHaveLength(5);
+  expect(state.items.map((item) => item.state)).toEqual([
+    'complete',
+    'complete',
+    'already_complete',
+    'already_complete',
+    'already_complete',
+  ]);
+  expect(
+    await page.evaluate(() => (window as unknown as { liveActions: string[] }).liveActions),
+  ).toEqual(['Start:false', 'Play:false', 'choice:0:false', 'choice:1:false']);
+});

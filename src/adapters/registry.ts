@@ -1,6 +1,7 @@
 import { Kind, type ActivityKind } from '../protocol/schema';
 import { fixtureAdapter, rootFor } from './fixture';
-import type { Ref } from './types';
+import type { Adapter, Ref } from './types';
+import { liveAdapter, liveKind, liveRoot, participationRoots } from './live';
 export class Registry {
   readonly adapters;
   private candidates = new Map<string, HTMLElement>();
@@ -8,24 +9,38 @@ export class Registry {
     readonly fixtureMode: boolean,
     readonly timeout = 8000,
   ) {
-    this.adapters = new Map(
-      ['animation', 'single_choice', 'short_answer', 'matching', 'ordered_blocks'].map((kind) => [
-        kind as ActivityKind,
-        fixtureAdapter(kind as Exclude<ActivityKind, 'unknown'>, timeout),
-      ]),
+    this.adapters = new Map<ActivityKind, Adapter>(
+      fixtureMode
+        ? ['animation', 'single_choice', 'short_answer', 'matching', 'ordered_blocks'].map(
+            (kind) => [
+              kind as ActivityKind,
+              fixtureAdapter(kind as Exclude<ActivityKind, 'unknown'>, timeout),
+            ],
+          )
+        : ['animation', 'single_choice'].map((kind) => [
+            kind as ActivityKind,
+            liveAdapter(kind as 'animation' | 'single_choice', timeout),
+          ]),
     );
   }
   scan(): Ref[] {
     if (!this.fixtureMode) {
-      // Historical audit establishes this as a candidate only, never an executable contract.
       this.candidates.clear();
-      return Array.from(document.querySelectorAll<HTMLElement>('.participation'))
+      const refs = participationRoots()
         .slice(0, 500)
         .map((root, i) => {
-          const id = `unverified-${i + 1}`;
+          const kind = liveKind(root);
+          const resourceId = root.getAttribute('content_resource_id');
+          const id =
+            kind !== 'unknown' && resourceId && /^\d{1,100}$/.test(resourceId)
+              ? `live-${resourceId}`
+              : `unverified-${i + 1}`;
           this.candidates.set(id, root);
-          return { id, kind: 'unknown' };
+          return { id, kind: id.startsWith('live-') ? kind : ('unknown' as const) };
         });
+      if (new Set(refs.map((ref) => ref.id)).size !== refs.length)
+        throw new Error('Live activity IDs are ambiguous. Rescan after the page finishes loading.');
+      return refs;
     }
     const roots = Array.from(document.querySelectorAll<HTMLElement>('[data-zf-activity]'));
     const ids = roots.map((el) => el.dataset.zfActivity);
@@ -40,6 +55,7 @@ export class Registry {
   }
   locate(ref: Ref): HTMLElement {
     if (this.fixtureMode) return rootFor(ref);
+    if (ref.kind !== 'unknown') return liveRoot(ref);
     const candidate = this.candidates.get(ref.id);
     if (!candidate?.isConnected)
       throw new Error('The page changed. Resume to rescan before showing this activity.');

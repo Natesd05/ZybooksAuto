@@ -2,7 +2,7 @@
 
 A Chrome Manifest V3 extension with a persistent React side panel, one cancellable activity runner, verified page evidence, and explicit manual handoff.
 
-**Status: engineering preview, not live zyBooks automation yet.** All five activity adapters execute against original synthetic fixtures. Current zyBooks widget DOM was unavailable for inspection; the production build deliberately reports unverified widgets instead of guessing selectors. The exact remaining integration inputs are in [the compatibility matrix](docs/compatibility.md). No store publication has been performed.
+**Status: 0.1.1 engineering preview with live animation and single-choice adapters.** Current zyBooks activity boundaries, completion indicators, animation playback controls, and radio feedback were inspected in Chrome on September 14, 2026. The production runner recognizes previously completed work and executes the supported controls. Short answers, matching, ordered blocks, and automatic live section navigation still require integration; unknown widgets stop for inspection. See [the compatibility matrix](docs/compatibility.md) for evidence and limits. No store publication has been performed.
 
 ## Setup
 
@@ -20,9 +20,11 @@ Load the production build:
 2. Enable Developer mode, select **Load unpacked**, and choose `.output/chrome-mv3`.
 3. Reload an existing `https://learn.zybooks.com/` tab.
 4. Click ZyFlow’s toolbar icon to open the persistent side panel.
-5. Use **Start run** to scan. Unverified activity boundaries become **needs attention**, with an explanation. **Inspect page** provides a read-only structural report for discovery.
+5. Use **Start run** to scan. Animations and single-choice activities use live adapters; unsupported activity boundaries become **needs attention**, with an explanation. **Inspect page** provides a read-only structural report for discovery.
 
 Only Chrome for Testing 153 was exercised automatically. Chrome 116 is the API minimum, not a tested-browser claim. Installing this preview does not establish compatibility with a particular book.
+
+For an existing installation, reload ZyFlow in `chrome://extensions`, reload the zyBooks tab, then Resume or start a new run. The panel should display **Preview 0.1.1**.
 
 ## Try the working fixture adapters
 

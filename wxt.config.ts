@@ -4,7 +4,7 @@ export default defineConfig({
   manifest: ({ mode }) => ({
     name: mode === 'fixture' ? 'ZyFlow • Fixture Lab' : 'ZyFlow',
     description:
-      'A transparent, cancellable participation activity runner. Live widget compatibility is unverified in this preview.',
+      'A cancellable participation runner for supported zyBooks animations and single-choice widgets.',
     minimum_chrome_version: '116',
     permissions: ['sidePanel', 'storage', 'webNavigation'],
     host_permissions:

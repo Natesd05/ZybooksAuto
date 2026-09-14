@@ -1,4 +1,5 @@
 import type { Snapshot } from '../protocol/schema';
+import { participationRoots } from '../adapters/live';
 /** Allowlisted export: no URL queries, DOM text, field values, site IDs or raw exceptions. */
 export function diagnostic(snapshot: Snapshot | null) {
   if (!snapshot) return { version: 1, status: 'disconnected' };
@@ -19,7 +20,7 @@ export function inspectStructure(root: Document = document) {
     version: 1,
     date: new Date().toISOString().slice(0, 10),
     frames: root.querySelectorAll('iframe').length,
-    participationCandidates: root.querySelectorAll('.participation').length,
+    participationCandidates: participationRoots(root).length,
     inputs: root.querySelectorAll('input').length,
     textareas: root.querySelectorAll('textarea').length,
     draggable: root.querySelectorAll('[draggable="true"]').length,

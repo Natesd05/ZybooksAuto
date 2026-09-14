@@ -193,6 +193,7 @@ export class Runner {
           this.registry.timeout,
         );
       const refs = this.registry.scan();
+      this.snapshot.compatible = refs.length > 0 && refs.every((ref) => ref.kind !== 'unknown');
       const old = new Map(
         this.snapshot.items
           .filter((i) => i.section === this.snapshot.section)
@@ -271,7 +272,7 @@ export class Runner {
         // Resume observes any already-dispatched action before planning another mutation.
         if (this.pending?.ref.id === item.id) {
           const pending = this.pending;
-          if (!before.complete && before.evidence === pending.evidence) {
+          if (!before.complete) {
             this.set('waiting', 'Reconciling the last dispatched action');
             item.state = 'waiting';
             await this.checkpoint();
@@ -291,11 +292,12 @@ export class Runner {
           await this.checkpoint();
           context.assertCurrent();
           this.pending = before;
-          this.snapshot.uncertain = { id: item.id, section: item.section };
+          if (plan.operation !== 'wait')
+            this.snapshot.uncertain = { id: item.id, section: item.section };
           await this.checkpoint();
           context.assertCurrent();
           adapter.execute(plan, context);
-          item.actions++;
+          if (plan.operation !== 'wait') item.actions++;
           item.state = 'waiting';
           this.set('waiting', 'Waiting for fresh activity evidence');
           await this.checkpoint();

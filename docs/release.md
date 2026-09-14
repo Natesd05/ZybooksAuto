@@ -1,3 +1,19 @@
+# ZyFlow 0.1.1 — live integration update
+
+Release date: **2026-09-14**. Local unpacked build and ZIP; no store publication.
+
+- Added separate live animation and single-choice adapters using controls inspected in Chrome.
+- Fixed nested participation badges being counted as separate activities (the inspected section has five activities, not 16).
+- Recognizes existing activity completion, waits for step readiness or fresh question feedback, and rejects stale actions.
+- Keeps unsupported families and live range navigation stopped for inspection.
+- Panel identifies the update as **Preview 0.1.1**.
+
+Validation: `npm run check` passed (TypeScript, ESLint, **42 unit tests**, production build and manifest checks). `npm run test:extension` passed **27 browser tests**, including the production bundle running against original fixtures modeled on the inspected live markup. Start/Play and radio synthetic clicks were also accepted on already-completed live widgets during inspection. These observations do not constitute a full installed-extension run on unfinished coursework. The installed 0.1.0 reload could not be verified because Chrome kept changing windows/tabs during automation.
+
+For an existing unpacked installation from this project, reload ZyFlow in `chrome://extensions`, reload the zyBooks tab, and Resume. If installed from an extracted ZIP elsewhere, replace it with this release or load `.output/chrome-mv3`. Verify the panel says **Preview 0.1.1**.
+
+## Historical 0.1.0 release notes
+
 # ZyFlow 0.1.0 — engineering preview
 
 Release date: **2026-09-13**. Distribution: local ZIP and unpacked extension. Not submitted to a store.

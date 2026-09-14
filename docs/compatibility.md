@@ -1,6 +1,16 @@
 # Compatibility and discovery evidence
 
-Recorded **2026-09-13**. Build: **0.1.0 engineering preview**.
+Updated **2026-09-14**. Build: **0.1.1 engineering preview**.
+
+## Live integration update
+
+Chrome inspection on September 14 established two live families: animations and single-choice participation. Section 4.1 contained five activity containers, including four completed activities; the old `.participation` selector counted 16 elements because it also matched nested completion badges. The scanner now excludes nested participation elements and uses stable `content_resource_id` identities for recognized families.
+
+The live adapter is separate from synthetic fixture adapters. It recognizes `.interactive-activity-container.participation`, checks the title bar’s exact activity completion label, and scopes actions within that boundary. Animations use Start, Play, Pause, the highlighted step and the optional labeled 2x checkbox. Play advances after a step finishes. Verification waits through Pause and only accepts changed readiness or whole-activity completion. Choices use question-local radio groups, bounded distinct attempts, question completion indicators, and fresh explanation markup; a native checked property alone is not feedback. Completed activities send no clicks.
+
+`tests/fixtures/live.ts` contains original content using this inspected structure. Production-extension tests exercise both families through the extension’s own synthetic event path. On the live page, synthetic Start/Play clicks advanced an already-completed player, and a radio click produced fresh correct feedback in an already-completed question. A full installed-extension run on unfinished coursework remains unverified; Chrome changed windows/tabs during the reload attempt. The historical matrix below records the original 0.1.0 limitations; animations and single-choice now have live adapters. Other families and live range navigation remain unsupported.
+
+## Original 0.1.0 evidence
 
 No current signed-in zyBooks activity DOM was available during implementation. Browser-surface inventory exposed no inspectable browser tabs, and the repository contains a historical source audit rather than captured live widgets. No account credentials were read, no textbook pages were copied into fixtures, and no live coursework was submitted. This is a concrete integration gap, not a passing live smoke check.
 
@@ -22,7 +32,7 @@ Matching support requires a visible mapping in this preview. Feedback-driven dis
 
 **Every `data-zf-*` attribute and every `data-control`, `data-field`, `data-answer-for`, `data-source`, `data-target`, `data-block`, and related solution attribute is an ORIGINAL SYNTHETIC FIXTURE CONTRACT. None is claimed to exist on zyBooks.** The fixture registry is gated by the build mode; adding similar attributes on a production page does not enable it.
 
-The read-only production inspector counts `.participation` elements as historical candidates based on the supplied source audit (`RESEARCH.md`, September 13, 2026). It does not infer family/completion from that class and does not click their descendants. Show on page can scroll to the exact candidate retained from the current scan; a detached candidate requires a rescan. Generic `input`, `textarea`, `iframe`, `[draggable="true"]`, `button`, and open-shadow-root counts are structural inventory, not activity support. Missing candidates produce needs attention and never completion.
+The production inspector counts outermost `.participation` candidates. Family detection additionally requires the observed activity boundary, resource ID, completion marker, and family-specific controls. Unknown candidates remain read-only. Show on page can scroll to the exact candidate retained from the current scan; a detached candidate requires a rescan. Generic `input`, `textarea`, `iframe`, `[draggable="true"]`, `button`, and open-shadow-root counts are structural inventory, not activity support. Missing candidates produce needs attention and never completion.
 
 `/zybook/:book/chapter/:chapter/section/:section` is used as a conservative route parser and fixture route shape; current book route compatibility was not observed. It is insufficient to authorize an action without a verified DOM adapter and loaded-section identity.
 
@@ -41,4 +51,4 @@ The Chromium extension test asserts that matching receives `event.isTrusted === 
 5. Test the actual extension-origin events, cancellation, rerenders and missing evidence.
 6. Perform a limited live Chrome smoke check and record precisely which variant passed before enabling that live adapter.
 
-Do not lift the production gate on the strength of the synthetic tests alone.
+Keep additional live families disabled until their actual controls and feedback have been inspected. Synthetic tests alone do not establish live compatibility.

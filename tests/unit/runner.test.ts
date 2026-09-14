@@ -248,5 +248,5 @@ it('read-only production locations reject detached candidates instead of using a
   expect(registry.locate(ref)).toBe(old);
   old.outerHTML = '<article class="participation"></article>';
   expect(() => registry.locate(ref)).toThrow('page changed');
-  expect(registry.adapters.size).toBe(5);
+  expect([...registry.adapters.keys()]).toEqual(['animation', 'single_choice']);
 });

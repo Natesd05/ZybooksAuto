@@ -1,10 +1,10 @@
 # Local release artifacts
 
-`zyflow-0.1.0-chrome.zip` is the production **engineering preview**. Unzip it and load the directory through Chrome's **Load unpacked** action.
+`zyflow-0.1.1-chrome.zip` is the production **engineering preview**. Unzip it and load the directory through Chrome's **Load unpacked** action.
 
-Live zyBooks activity compatibility is unverified; this package detects candidates and stops for inspection rather than executing synthetic fixture adapters. See [setup and fixture demo](../README.md) and [compatibility gates](../docs/compatibility.md).
+This package adds live adapters for the inspected animation and single-choice widgets, recognizes completed work, and excludes nested participation badges from the activity count. Other widget families remain unsupported. See [setup and fixture demo](../README.md) and [compatibility gates](../docs/compatibility.md).
 
-`zyflow-0.1.0-chrome.zip.sha256` records the package checksum. Regenerate both with:
+`zyflow-0.1.1-chrome.zip.sha256` records the package checksum. Regenerate both with:
 
 ```sh
 npm run zip

@@ -202,7 +202,7 @@ export function App() {
             <span className="eyebrow">A little more clarity.</span>
           </div>
         </div>
-        <span className="preview">Preview 0.1</span>
+        <span className="preview">Preview 0.1.1</span>
       </header>
       <section className="connection" aria-label="Connected section">
         <div>
@@ -244,7 +244,7 @@ export function App() {
         <span aria-hidden="true">ⓘ</span>{' '}
         {import.meta.env.MODE === 'fixture'
           ? 'Fixture Lab · synthetic activities, real extension actions.'
-          : 'Live zyBooks widgets are unverified. This preview stops for inspection on unrecognized markup.'}
+          : 'Supports inspected animation and single-choice widgets. Other widget types stop for inspection.'}
       </p>
       <section className="run-card" aria-label="Run progress">
         <div className="section-heading">
