@@ -1,0 +1,9 @@
+# Local data behavior
+
+ZyFlow has no application backend, analytics endpoint, model provider, login form, credential store or private zyBooks API client. It reads the visible page DOM in the existing browser session. Ordinary page controls can cause the site itself to communicate with its server.
+
+Session storage contains the pinned tab/document identity, current route, book/section identifier, activity IDs and statuses, settings, visited routes, a possible navigation or uncertain-action marker, and up to 50 revoked internal run IDs used to reject late checkpoints after Stop. These are stored locally in `chrome.storage.session`. The session route may include the existing LMS query parameters so a handoff preserves context; these parameters are not exported in diagnostics. Answer values and question content exist only transiently inside an adapter action plan and are not persisted.
+
+Local storage contains preferences and at most 100 redacted diagnostic snapshots. Redaction is allowlist-based: state, sequence, timestamps, activity family, anonymous index, outcome and action count. Structural inspection reports counts only. Default exports exclude page text, answers, credentials, raw errors, book/activity IDs and URLs. Exports are user-initiated local downloads; there is no transmission feature.
+
+Removing the extension clears its stored data. Browser restart clears active session checkpoints; local preferences remain. Initial permissions are exactly `sidePanel`, `storage`, `webNavigation` and host access to `https://learn.zybooks.com/*`. The separately labeled fixture build additionally accesses localhost for tests and must not be distributed as production.

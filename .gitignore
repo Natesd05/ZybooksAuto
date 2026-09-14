@@ -1,0 +1,11 @@
+node_modules/
+.wxt/
+.output/
+.playwright/
+test-results/
+playwright-report/
+coverage/
+.DS_Store
+.output-fixture/
+release/*.zip
+release/*.sha256

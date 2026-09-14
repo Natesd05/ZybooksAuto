@@ -1,0 +1,47 @@
+{
+  "name": "zyflow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Observable, cancellable participation activity runner for Chrome",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "build:test": "wxt build --mode fixture",
+    "zip": "wxt zip",
+    "typecheck": "wxt prepare && tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:extension": "npm run build && npm run build:test && playwright test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "check:manifest": "node scripts/check-manifest.mjs",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build && npm run check:manifest",
+    "postinstall": "wxt prepare",
+    "package:release": "node scripts/package-release.mjs"
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zod": "4.6.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
+    "@types/chrome": "0.2.9",
+    "@types/node": "26.5.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@wxt-dev/module-react": "1.2.2",
+    "eslint": "10.10.0",
+    "jsdom": "29.1.1",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.0",
+    "vitest": "5.0.0",
+    "wxt": "0.21.4"
+  }
+}

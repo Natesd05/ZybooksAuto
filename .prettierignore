@@ -1,0 +1,12 @@
+node_modules
+.output*
+.wxt
+research
+package-lock.json
+playwright-report
+test-results
+
+PLAN.md
+RESEARCH.md
+BUILD_PROMPT.md
+release
