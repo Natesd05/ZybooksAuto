@@ -33,7 +33,9 @@ export default defineContentScript({
           documentId: crypto.randomUUID(),
           route: location.href,
         });
-        if (!response?.ok || disposed) return;
+        if (!response?.ok)
+          throw new Error(response?.error ?? 'The extension rejected the page connection.');
+        if (disposed) return;
         runner?.dispose();
         runner = new Runner(
           response.identity,
@@ -70,9 +72,15 @@ export default defineContentScript({
       }
       if (rawType === 'get-snapshot') {
         void (async () => {
-          if (!runner) await connect();
+          if (connecting) await connecting;
+          else if (!runner) await connect();
           respond({ ok: !!runner, snapshot: runner?.snapshot });
-        })();
+        })().catch((error) =>
+          respond({
+            ok: false,
+            error: error instanceof Error ? error.message : 'The page connection failed.',
+          }),
+        );
         return true;
       }
       if (rawType === 'inspect') {

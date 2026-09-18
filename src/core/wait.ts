@@ -1,6 +1,11 @@
 export function check(signal: AbortSignal) {
   signal.throwIfAborted();
 }
+export class EvidenceTimeoutError extends Error {
+  constructor() {
+    super('No fresh completion or feedback evidence. Inspect the activity before retrying.');
+  }
+}
 /** Observe only until evidence, timeout or cancellation; every exit removes all resources. */
 export function waitFor<T>(
   read: () => T | undefined | false,
@@ -52,11 +57,7 @@ export function waitFor<T>(
     resources.poll = setInterval(inspect, 150);
     resources.deadline = setTimeout(() => {
       clean();
-      reject(
-        new Error(
-          'No fresh completion or feedback evidence. Inspect the activity before retrying.',
-        ),
-      );
+      reject(new EvidenceTimeoutError());
     }, timeout);
     inspect();
   });

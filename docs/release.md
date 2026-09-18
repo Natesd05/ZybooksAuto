@@ -1,3 +1,91 @@
+# ZyFlow 0.1.7 — replace outdated runners on Connect
+
+Release date: **2026-09-17**. Local unpacked build and ZIP; no store publication.
+
+- Connect replaces a missing, outdated, or stale-heartbeat page runner with the current packaged script in the same document.
+- An older saved checkpoint also triggers replacement, even when a current script answers the probe.
+- The content-script lifecycle cancels the old runner and removes its listener. The replacement keeps the run identity, ledger, and uncertain-action checkpoint; active work remains paused for explicit Resume.
+- Concurrent connection requests share one repair attempt. A healthy current runner is reused.
+- Browser regressions cover both obsolete saved checkpoints and a genuinely older running script, including replacement while an action is pending.
+
+Validation: 44 unit tests and all 36 browser tests passed. Type checking, lint, production build, manifest checks, and release packaging passed. The automatic upgrade still needs confirmation in the affected live installation.
+
+## Historical 0.1.6 release notes
+
+# ZyFlow 0.1.6 — continue after exhausted multiple-choice questions
+
+Release date: **2026-09-16**. Local unpacked build and ZIP; no store publication.
+
+- Live single-choice questions try each available option at most once per loaded runner, including initially selected options.
+- Exhausted questions no longer pause the queue; subsequent questions in the same activity are attempted before moving to the next activity.
+- A choice feedback timeout permits the next bounded attempt. Stop, Pause, and document changes still cancel further actions.
+- Activities without verified completion are automatically marked skipped after their choices are exhausted. Verified counts remain based on completion indicators.
+- All-completed question sets allow a bounded wait for the activity completion marker before being skipped if that marker never arrives.
+
+Validation: 44 unit tests and 34 browser tests passed, including multiple exhausted questions, missing feedback, cancellation, and continuation to the next activity. Type checking, lint, production packaging, and manifest checks passed.
+
+## Historical 0.1.5 release notes
+
+# ZyFlow 0.1.5 — load a missing page runner on Connect
+
+Release date: **2026-09-16**. Local unpacked build and ZIP; no store publication.
+
+- When the page has no extension listener, Connect injects the packaged content script into that exact document and retries the handshake.
+- Concurrent connection requests share the same recovery attempt. Existing listeners are queried without reinjection.
+- Page handshakes finish publishing their checkpoint before returning the connection response.
+- Adds `scripting` permission; production host access remains restricted to `https://learn.zybooks.com/*`.
+- A production browser regression removes automatic content-script registration, verifies Connect restores an idle runner, and checks that repeated Connect neither replaces the run nor clicks page controls.
+
+Validation: `npm run check` passed with 42 unit tests, type checking, lint, production build and manifest checks. All 33 browser tests passed, including recovery with no registered page script. Release ZIP and checksum were generated.
+
+Live verification on the affected installation remains outstanding.
+
+## Historical 0.1.4 release notes
+
+# ZyFlow 0.1.4 — verify the connected page
+
+Release date: **2026-09-16**. Local unpacked build and ZIP; no store publication.
+
+- Connect contacts the pinned page even when a saved checkpoint exists; cached state alone no longer establishes a connection.
+- Preserve saved runs for Stop and recovery when the page is unavailable, and display the connection error.
+- Report outdated runners and missing heartbeats instead of claiming a successful connection.
+- Add **Refresh connected page** to recover the affected tab directly. After loading, click Connect again.
+
+Validation: 42 unit tests and 32 browser tests passed. The three connection/recovery browser tests also passed after the final heartbeat check. Type checking, lint, production packaging, and manifest checks passed.
+
+The reported panel showed an older runner with no heartbeat despite claiming it was connected. Live recovery on the user's installation still requires verification.
+
+## Historical 0.1.3 release notes
+
+# ZyFlow 0.1.3 — connection recovery and error reporting
+
+Release date: **2026-09-16**. Local unpacked build and ZIP; no store publication.
+
+- Connect now replaces an abandoned tab selection when no checkpoint owns a run.
+- Connection failures retain the actual error, including missing page scripts, rejected handshakes, and inaccessible tabs.
+- Connect shows a pending state and times out with recovery instructions instead of waiting indefinitely.
+- Content scripts reply with handshake failures instead of leaving the response channel unanswered.
+
+Validation: TypeScript, ESLint, **42 unit tests**, **31 browser tests**, production build, and manifest checks passed. Browser regressions cover disabled Start on an inaccessible page and recovery from an abandoned tab selection.
+
+This update does not establish the cause of the reported live connection failure; the affected browser and panel message are still needed to diagnose it.
+
+## Historical 0.1.2 release notes
+
+# ZyFlow 0.1.2 — activity boundaries and upgrade detection
+
+Release date: **2026-09-15**. Local unpacked build and ZIP; no store publication.
+
+- Count only outermost `.interactive-activity-container.participation` containers. Standalone participation badges are excluded.
+- Show the package version in the panel and runner version in diagnostic exports.
+- Detect older or unversioned page runners and require a tab refresh before Start, Resume, Retry, or Skip. Pause and Stop remain available.
+
+For an existing installation, reload ZyFlow in `chrome://extensions`, then refresh the zyBooks tab and reconnect. Verify the panel says **Preview 0.1.2**.
+
+Validation: `npm run check` passed, including **42 unit tests**. The **27 existing browser tests** passed, followed by **2 new upgrade regression tests** covering unversioned and 0.1.1 runners, blocked commands, and recovery after refresh. Live support remains limited to the previously inspected animation and single-choice widgets; this update has not been verified against unfinished live coursework.
+
+## Historical 0.1.1 release notes
+
 # ZyFlow 0.1.1 — live integration update
 
 Release date: **2026-09-14**. Local unpacked build and ZIP; no store publication.

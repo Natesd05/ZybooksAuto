@@ -2,7 +2,7 @@
 
 A Chrome Manifest V3 extension with a persistent React side panel, one cancellable activity runner, verified page evidence, and explicit manual handoff.
 
-**Status: 0.1.1 engineering preview with live animation and single-choice adapters.** Current zyBooks activity boundaries, completion indicators, animation playback controls, and radio feedback were inspected in Chrome on September 14, 2026. The production runner recognizes previously completed work and executes the supported controls. Short answers, matching, ordered blocks, and automatic live section navigation still require integration; unknown widgets stop for inspection. See [the compatibility matrix](docs/compatibility.md) for evidence and limits. No store publication has been performed.
+**Status: 0.1.7 engineering preview with live animation and single-choice adapters.** Current zyBooks activity boundaries, completion indicators, animation playback controls, and radio feedback were inspected in Chrome on September 14, 2026. The production runner recognizes previously completed work and executes the supported controls. Short answers, matching, ordered blocks, and automatic live section navigation still require integration; unknown widgets stop for inspection. See [the compatibility matrix](docs/compatibility.md) for evidence and limits. No store publication has been performed.
 
 ## Setup
 
@@ -24,7 +24,7 @@ Load the production build:
 
 Only Chrome for Testing 153 was exercised automatically. Chrome 116 is the API minimum, not a tested-browser claim. Installing this preview does not establish compatibility with a particular book.
 
-For an existing installation, reload ZyFlow in `chrome://extensions`, reload the zyBooks tab, then Resume or start a new run. The panel should display **Preview 0.1.1**.
+For an existing installation, reload ZyFlow in `chrome://extensions`, reload the zyBooks tab, then Resume or start a new run. The panel should display **Preview 0.1.7**. Connect loads missing page scripts and replaces outdated runners directly, without refreshing the tab. Existing progress is preserved; active work stays paused until Resume. Chrome must allow ZyFlow access to learn.zybooks.com.
 
 ## Try the working fixture adapters
 
@@ -34,6 +34,8 @@ node scripts/fixture-server.mjs
 ```
 
 Load `.output/chrome-mv3-fixture` as a separate unpacked extension. Open <http://localhost:4173/zybook/demo/chapter/1/section/1>, then open **ZyFlow • Fixture Lab** from the toolbar. Start runs animations, bounded MCQ attempts, revealed short answers, HTML drag/drop matching, and ordered blocks with indentation and distractors. These are synthetic questions and an explicitly designed fixture contract, not captured textbook content.
+
+Live multiple-choice questions try each available option at most once per loaded runner. Exhausted questions advance automatically; activities without a completion indicator are marked skipped, and the queue continues.
 
 Current section is the default scope. A range requires an explicit end section (for example `1.2`) and a maximum section count. Unsupported items stop the queue until explicitly skipped. Valid run settings are preserved when you reopen the panel. Invalid ranges show a specific correction before Start is available. Use **Go to connected tab** to return to a paused run. Closing the panel leaves the runner alive; Pause and Stop cancel future extension actions. Already dispatched page actions may still finish. Hidden tabs pause by default.
 

@@ -241,12 +241,13 @@ it.each(['stopped', 'finished'] as const)(
 );
 
 it('read-only production locations reject detached candidates instead of using a new index match', () => {
-  document.body.innerHTML = '<article class="participation"></article>';
+  document.body.innerHTML =
+    '<article class="interactive-activity-container participation"></article>';
   const registry = new Registry(false);
   const ref = registry.scan()[0]!;
   const old = document.querySelector('article')!;
   expect(registry.locate(ref)).toBe(old);
-  old.outerHTML = '<article class="participation"></article>';
+  old.outerHTML = '<article class="interactive-activity-container participation"></article>';
   expect(() => registry.locate(ref)).toThrow('page changed');
   expect([...registry.adapters.keys()]).toEqual(['animation', 'single_choice']);
 });

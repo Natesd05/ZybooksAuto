@@ -4,7 +4,7 @@ const manifest = JSON.parse(await readFile('.output/chrome-mv3/manifest.json', '
 assert.equal(manifest.manifest_version, 3);
 assert.deepEqual(
   [...manifest.permissions].sort(),
-  ['sidePanel', 'storage', 'webNavigation'].sort(),
+  ['sidePanel', 'storage', 'webNavigation', 'scripting'].sort(),
 );
 assert.deepEqual(manifest.host_permissions, ['https://learn.zybooks.com/*']);
 assert.deepEqual(

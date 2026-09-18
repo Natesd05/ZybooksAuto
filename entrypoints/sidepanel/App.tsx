@@ -12,6 +12,7 @@ import {
 import { settingsProblem } from '../../src/core/settings';
 import { counts } from '../../src/core/state';
 import { diagnostic } from '../../src/diagnostics';
+import { BUILD_VERSION, STALE_RUNNER_MESSAGE } from '../../src/core/build';
 const labels: Record<ActivityKind, string> = {
   animation: 'Animations',
   single_choice: 'Multiple choice',
@@ -50,13 +51,38 @@ export function App() {
   const [notice, setNotice] = useState('Connecting to your section…');
   const [now, setNow] = useState(Date.now());
   const [report, setReport] = useState<unknown>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [connectionError, setConnectionError] = useState('');
   async function connect() {
+    setConnecting(true);
+    setNotice('Connecting to your section…');
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const response = await chrome.runtime.sendMessage({ ...envelope(), type: 'panel' });
+      const response = await Promise.race([
+        chrome.runtime.sendMessage({ ...envelope(), type: 'panel' }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  'Connection timed out. Reload ZyFlow in chrome://extensions, refresh the zyBooks tab, then click Connect.',
+                ),
+              ),
+            8000,
+          );
+        }),
+      ]);
       if (!response?.ok)
-        throw new Error('Connection unavailable. Reload the extension and section.');
+        throw new Error(
+          response?.error ?? 'Connection unavailable. Reload the extension and section.',
+        );
       const parsed = SnapshotSchema.safeParse(response.snapshot);
+      if (response.snapshot && !parsed.success)
+        throw new Error(
+          'The page returned incompatible connection data. Reload ZyFlow and refresh the zyBooks tab.',
+        );
       setSnapshot(parsed.success ? parsed.data : null);
+      setConnectionError(response.connectionError ?? '');
       setActiveTab(response.activeTabId);
       setSettings(
         parsed.success && !['idle', 'stopped', 'finished', 'error'].includes(parsed.data.state)
@@ -64,17 +90,47 @@ export function App() {
           : (response.preferences ?? defaults),
       );
       setNotice(
-        parsed.success
-          ? response.activeTabId !== parsed.data.identity.tabId &&
-            ['scanning', 'running', 'waiting', 'paused', 'needs_attention', 'navigating'].includes(
-              parsed.data.state,
-            )
-            ? 'This run is pinned to another tab. Stop it before connecting to a different section.'
-            : 'Connected to the pinned tab.'
-          : 'Open a zyBooks section, then connect.',
+        response.connectionError ??
+          (parsed.success && parsed.data.runnerVersion !== BUILD_VERSION
+            ? STALE_RUNNER_MESSAGE
+            : parsed.success
+              ? response.activeTabId !== parsed.data.identity.tabId &&
+                [
+                  'scanning',
+                  'running',
+                  'waiting',
+                  'paused',
+                  'needs_attention',
+                  'navigating',
+                ].includes(parsed.data.state)
+                ? 'This run is pinned to another tab. Stop it before connecting to a different section.'
+                : 'Connected to the pinned tab.'
+              : 'Open a zyBooks section, then connect.'),
       );
+    } catch (error) {
+      setConnectionError(error instanceof Error ? error.message : 'Connection failed.');
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : 'Cannot connect. Reload ZyFlow and refresh the zyBooks tab.',
+      );
+    } finally {
+      clearTimeout(timer);
+      setConnecting(false);
+    }
+  }
+  async function refreshConnectedPage() {
+    if (!snapshot) return;
+    setPending('refresh');
+    try {
+      await chrome.tabs.reload(snapshot.identity.tabId);
+      setNotice('Refreshing the connected page. Wait for it to load, then click Connect.');
     } catch {
-      setNotice('Cannot connect. Open a zyBooks section and reload it after installing ZyFlow.');
+      setNotice(
+        'The connected tab could not be refreshed. Open your zyBooks section and click Connect.',
+      );
+    } finally {
+      setPending('');
     }
   }
   useEffect(() => {
@@ -178,7 +234,8 @@ export function App() {
   const totals = snapshot ? counts(snapshot) : null;
   const verified = totals ? totals.complete + totals.already_complete : 0;
   const total = snapshot?.items.length ?? 0;
-  const live = !!snapshot && now - snapshot.heartbeatAt < 12000;
+  const staleRunner = !!snapshot && snapshot.runnerVersion !== BUILD_VERSION;
+  const live = !!snapshot && !staleRunner && now - snapshot.heartbeatAt < 12000;
   const busy =
     !!snapshot && ['scanning', 'running', 'waiting', 'navigating'].includes(snapshot.state);
   const configurable =
@@ -202,7 +259,7 @@ export function App() {
             <span className="eyebrow">A little more clarity.</span>
           </div>
         </div>
-        <span className="preview">Preview 0.1.1</span>
+        <span className="preview">Preview {BUILD_VERSION}</span>
       </header>
       <section className="connection" aria-label="Connected section">
         <div>
@@ -223,12 +280,13 @@ export function App() {
           </span>
           <button
             className="text-button"
+            disabled={connecting}
             onClick={() => {
               setNotice('Connecting…');
               void connect();
             }}
           >
-            Connect
+            {connecting ? 'Connecting…' : 'Connect'}
           </button>
         </div>
       </section>
@@ -246,6 +304,18 @@ export function App() {
           ? 'Fixture Lab · synthetic activities, real extension actions.'
           : 'Supports inspected animation and single-choice widgets. Other widget types stop for inspection.'}
       </p>
+      {snapshot && (staleRunner || connectionError) && (
+        <div className="callout">
+          <p role="alert">{connectionError || STALE_RUNNER_MESSAGE}</p>
+          <button
+            className="text-button"
+            disabled={!!pending}
+            onClick={() => void refreshConnectedPage()}
+          >
+            Refresh connected page
+          </button>
+        </div>
+      )}
       <section className="run-card" aria-label="Run progress">
         <div className="section-heading">
           <span className="eyebrow">YOUR RUN</span>
@@ -282,7 +352,9 @@ export function App() {
           <span style={{ width: `${total ? (verified / total) * 100 : 0}%` }} />
         </div>
         <p className="action" aria-live="polite" data-testid="current-action">
-          {snapshot?.action ?? 'Choose your scope, then start a scan.'}
+          {staleRunner
+            ? STALE_RUNNER_MESSAGE
+            : (snapshot?.action ?? 'Choose your scope, then start a scan.')}
         </p>
         <div className="metrics">
           <span>
@@ -296,7 +368,9 @@ export function App() {
           {configurable && (
             <button
               className="primary"
-              disabled={!snapshot || !!pending || !!settingsError}
+              disabled={
+                !snapshot || staleRunner || !!connectionError || !!pending || !!settingsError
+              }
               aria-describedby={settingsError ? 'settings-error' : undefined}
               onClick={() => void command('start')}
             >
@@ -316,7 +390,7 @@ export function App() {
           {snapshot && ['paused', 'needs_attention'].includes(snapshot.state) && (
             <button
               className="primary"
-              disabled={!!pending}
+              disabled={!!pending || staleRunner}
               aria-label="Resume"
               onClick={() => void command('resume')}
             >
@@ -497,14 +571,14 @@ export function App() {
                         <>
                           <button
                             className="text-button"
-                            disabled={!!pending || item.kind === 'unknown'}
+                            disabled={!!pending || staleRunner || item.kind === 'unknown'}
                             onClick={() => void command('retry', item.id)}
                           >
                             Retry
                           </button>
                           <button
                             className="text-button"
-                            disabled={!!pending}
+                            disabled={!!pending || staleRunner}
                             onClick={() => void command('skip', item.id)}
                           >
                             Skip

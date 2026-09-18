@@ -79,6 +79,7 @@ export const Handoff = z.object({
 export type Handoff = z.infer<typeof Handoff>;
 export const Snapshot = z.object({
   protocolVersion: z.literal(1),
+  runnerVersion: z.string().max(40).optional(),
   runId: Id,
   identity: Identity,
   seq: z.number().int().nonnegative(),

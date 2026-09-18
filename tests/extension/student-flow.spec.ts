@@ -75,6 +75,28 @@ test('student can correct an invalid range before sending a Start request', asyn
   await expect(section).toHaveURL(/section\/2/);
 });
 
+test('Connect explains why Start is disabled on an unsupported page', async () => {
+  await section.goto('about:blank');
+  await openPanel();
+  await expect(panel.getByRole('status')).toContainText('No accessible zyBooks tab is selected');
+  await expect(panel.getByRole('button', { name: 'Start run' })).toBeDisabled();
+  await panel.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect(panel.getByRole('status')).toContainText('allow ZyFlow site access');
+  await expect(panel.getByRole('button', { name: 'Connect', exact: true })).toBeEnabled();
+});
+
+test('Connect recovers an abandoned tab selection without a checkpoint', async () => {
+  await context.serviceWorkers()[0]!.evaluate(async () => {
+    await chrome.storage.session.set({ selectedTab: 999999 });
+  });
+  await section.goto('http://localhost:4173/zybook/demo/chapter/1/section/1?case=navigation');
+  await openPanel();
+  await section.bringToFront();
+  await panel.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect(panel.getByRole('heading', { name: 'Section 1.1', exact: true })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Start run' })).toBeEnabled();
+});
+
 test('student settings survive closing and reopening before and after a run', async () => {
   await setup('navigation');
   await panel.getByLabel('Run scope', { exact: true }).selectOption('range');
@@ -123,7 +145,7 @@ test('production student can locate an unsupported candidate without submitting 
   await section.route('https://learn.zybooks.com/**', (route) =>
     route.fulfill({
       contentType: 'text/html',
-      body: '<!doctype html><body style="margin:0"><div style="height:1600px">Synthetic surrounding content</div><article class="participation" style="height:400px"><button onclick="document.body.dataset.submitted=1">Check</button></article></body>',
+      body: '<!doctype html><body style="margin:0"><div style="height:1600px">Synthetic surrounding content</div><article class="interactive-activity-container participation" style="height:400px"><button onclick="document.body.dataset.submitted=1">Check</button></article></body>',
     }),
   );
   await section.goto('https://learn.zybooks.com/zybook/demo/chapter/1/section/1');

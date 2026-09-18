@@ -6,7 +6,7 @@ export default defineConfig({
     description:
       'A cancellable participation runner for supported zyBooks animations and single-choice widgets.',
     minimum_chrome_version: '116',
-    permissions: ['sidePanel', 'storage', 'webNavigation'],
+    permissions: ['sidePanel', 'storage', 'webNavigation', 'scripting'],
     host_permissions:
       mode === 'fixture'
         ? ['https://learn.zybooks.com/*', 'http://localhost/*']

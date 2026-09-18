@@ -13,9 +13,13 @@ describe('live activity boundaries', () => {
       (_, index) => `
       <div class="interactive-activity-container participation" content_resource_id="${index}">
         <div class="activity-title-bar"><span class="participation">Participation activity</span></div>
-        <div class="activity-payload"><span class="participation">Question status</span></div>
+        <div class="activity-payload"><span class="interactive-activity-container participation">Question status</span></div>
       </div>`,
     ).join('');
+    document.body.insertAdjacentHTML(
+      'afterbegin',
+      '<aside class="participation">Participation summary</aside>',
+    );
     expect(new Registry(false).scan()).toHaveLength(5);
     expect(inspectStructure().participationCandidates).toBe(5);
   });
@@ -79,7 +83,7 @@ describe('inspected live adapters', () => {
     document.body.innerHTML = liveActivity('1', 'animation') + liveActivity('1', 'animation');
     expect(() => new Registry(false).scan()).toThrow('ambiguous');
     document.body.innerHTML =
-      '<article class="participation" data-zf-activity="fake" data-kind="animation"><button>Start</button></article>';
+      '<article class="interactive-activity-container participation" data-zf-activity="fake" data-kind="animation"><button>Start</button></article>';
     expect(new Registry(false).scan()[0]?.kind).toBe('unknown');
   });
 
@@ -121,13 +125,67 @@ describe('inspected live adapters', () => {
     expect(button.getAttribute('aria-label')).toBe('Pause');
   });
 
-  it('does not treat checking a radio as fresh feedback or retry a dispatched choice', async () => {
+  it('continues after a feedback timeout without claiming completion or repeating a choice', async () => {
     document.body.innerHTML = liveActivity('1', 'single_choice');
     const adapter = liveAdapter('single_choice', 30);
     const before = adapter.inspect(new Registry(false).scan()[0]!);
     adapter.execute(adapter.plan(before)!, context());
-    await expect(adapter.verify(before, context())).rejects.toThrow('No fresh');
+    expect((await adapter.verify(before, context())).complete).toBe(false);
     const next = adapter.plan(adapter.inspect(before.ref))!;
     expect(next.target).toBe('0:1');
+  });
+
+  it('tries every choice once, advances through exhausted questions, and continues to the next activity', async () => {
+    document.body.innerHTML =
+      liveActivity('1', 'single_choice') + liveActivity('2', 'single_choice');
+    const roots = document.querySelectorAll<HTMLElement>('.interactive-activity-container');
+    const copy = roots[0]!
+      .querySelector('.multiple-choice-question')!
+      .cloneNode(true) as HTMLElement;
+    copy.querySelectorAll('input').forEach((input) => {
+      input.name = 'second-question';
+    });
+    roots[0]!.querySelector('.activity-payload')!.append(copy);
+    roots[0]!.querySelector('input')!.checked = true;
+    const clicked: number[] = [];
+    const inputs = Array.from(document.querySelectorAll('input'));
+    inputs.forEach((input, index) =>
+      input.addEventListener('click', () => {
+        clicked.push(index);
+        if (index === 4)
+          roots[1]!
+            .querySelector('.title-bar-chevron')!
+            .setAttribute('aria-label', 'Activity completed');
+      }),
+    );
+    const runner = new Runner(identity, new Registry(false, 20), async () => {});
+    try {
+      await runner.command({
+        ...envelope(),
+        type: 'command',
+        command: 'start',
+        runId: runner.snapshot.runId,
+        identity,
+        settings: { ...defaults, pauseHidden: false },
+      });
+      await vi.waitFor(() => expect(runner.snapshot.state).toBe('finished'));
+      expect(clicked).toEqual([0, 1, 2, 3, 4]);
+      expect(runner.snapshot.items.map((item) => item.state)).toEqual(['skipped', 'complete']);
+      expect(runner.snapshot.items[0]!.actions).toBe(4);
+      expect(runner.snapshot.action).toBe('Finished with 1 skipped');
+    } finally {
+      runner.dispose();
+    }
+  });
+
+  it('still cancels a choice feedback wait when stopped', async () => {
+    document.body.innerHTML = liveActivity('1', 'single_choice');
+    const adapter = liveAdapter('single_choice', 30);
+    const before = adapter.inspect(new Registry(false).scan()[0]!);
+    const ctx = context();
+    adapter.execute(adapter.plan(before)!, ctx);
+    const verifying = adapter.verify(before, ctx);
+    ctx.controller.abort();
+    await expect(verifying).rejects.toThrow('Cancelled');
   });
 });

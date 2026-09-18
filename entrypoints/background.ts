@@ -9,6 +9,7 @@ import {
 import { getCheckpoint, getPreferences, saveCheckpoint } from '../src/storage/checkpoints';
 import { matchesHandoff, routeKey, routeIdentity } from '../src/navigation/routes';
 import { diagnostic } from '../src/diagnostics';
+import { BUILD_VERSION, STALE_RUNNER_MESSAGE } from '../src/core/build';
 
 export default defineBackground(() => {
   let queue: Promise<unknown> = Promise.resolve();
@@ -26,6 +27,63 @@ export default defineBackground(() => {
   };
   const panelSender = (sender: chrome.runtime.MessageSender) =>
     sender.id === chrome.runtime.id && sender.url === chrome.runtime.getURL('sidepanel.html');
+  const connections = new Map<
+    number,
+    Promise<{ ok: boolean; snapshot?: Snapshot; error?: string }>
+  >();
+  function pageSnapshot(tabId: number, repairSavedRunner = false) {
+    const existing = connections.get(tabId);
+    if (existing) return existing;
+    const work = (async () => {
+      try {
+        const response = await chrome.tabs.sendMessage(
+          tabId,
+          { type: 'get-snapshot' },
+          { frameId: 0 },
+        );
+        if (
+          !repairSavedRunner &&
+          response?.ok &&
+          response.snapshot?.runnerVersion === BUILD_VERSION &&
+          Date.now() - response.snapshot.heartbeatAt < 12000
+        )
+          return response;
+        // Explicit handshake failures need their own explanation, not another injection.
+        if (!response?.ok) return response;
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          !/Receiving end does not exist|Could not establish connection/.test(error.message)
+        )
+          throw error;
+      }
+      const frame = await chrome.webNavigation.getFrame({ tabId, frameId: 0 });
+      if (!frame?.documentId || !allowed(frame.url))
+        throw new Error(
+          'The tab left zyBooks while connecting. Select your section and click Connect.',
+        );
+      try {
+        // WXT invalidates the previous content context, cancels its runner, and removes its listener.
+        // The replacement handshakes against the saved checkpoint and leaves active work paused.
+        await chrome.scripting.executeScript({
+          target: { tabId, documentIds: [frame.documentId] },
+          files: ['content-scripts/content.js'],
+        });
+      } catch (error) {
+        throw new Error(
+          'Chrome could not load ZyFlow into this page. In ZyFlow extension details, allow site access to learn.zybooks.com, then click Connect.',
+          { cause: error },
+        );
+      }
+      return chrome.tabs.sendMessage(
+        tabId,
+        { type: 'get-snapshot' },
+        { documentId: frame.documentId },
+      );
+    })().finally(() => connections.delete(tabId));
+    connections.set(tabId, work);
+    return work;
+  }
   async function publish(snapshot: Snapshot) {
     await saveCheckpoint(snapshot);
     const label = {
@@ -106,6 +164,7 @@ export default defineBackground(() => {
       if (message.type === 'panel') {
         await queue.catch(() => {});
         let checkpoint = await getCheckpoint();
+        let connectionError: string | undefined;
         const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
         if (
           checkpoint &&
@@ -118,15 +177,64 @@ export default defineBackground(() => {
           await chrome.storage.session.remove('checkpoint');
           checkpoint = null;
         }
-        if (!checkpoint && tab?.id && tab.url && allowed(tab.url)) {
-          const response = await chrome.tabs
-            .sendMessage(tab.id, { type: 'get-snapshot' }, { frameId: 0 })
-            .catch(() => null);
-          checkpoint = response?.snapshot ?? null;
-        }
+        const target = checkpoint
+          ? await chrome.tabs.get(checkpoint.identity.tabId).catch(() => null)
+          : tab;
+        if (target?.id && target.url && allowed(target.url)) {
+          // An explicit connection replaces an abandoned tab selection when no run owns it.
+          if (!checkpoint) await chrome.storage.session.set({ selectedTab: target.id });
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            const response = await Promise.race([
+              pageSnapshot(target.id, !!checkpoint && checkpoint.runnerVersion !== BUILD_VERSION),
+              new Promise<never>((_, reject) => {
+                timer = setTimeout(
+                  () =>
+                    reject(
+                      new Error(
+                        'The page runner did not respond. Refresh the zyBooks tab, then click Connect.',
+                      ),
+                    ),
+                  5000,
+                );
+              }),
+            ]);
+            if (!response?.ok || !response.snapshot)
+              throw new Error(
+                response?.error ??
+                  'The page runner could not connect. Refresh the zyBooks tab, then click Connect.',
+              );
+            checkpoint = response.snapshot;
+            if (checkpoint && checkpoint.runnerVersion !== BUILD_VERSION)
+              connectionError = STALE_RUNNER_MESSAGE;
+            else if (checkpoint && Date.now() - checkpoint.heartbeatAt >= 12000)
+              connectionError =
+                'The page runner has no recent heartbeat. Refresh the connected page, then click Connect.';
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              /Receiving end does not exist|Could not establish connection/.test(error.message)
+            )
+              connectionError =
+                'ZyFlow is not loaded in this page. Allow this extension access to learn.zybooks.com in Chrome, refresh the zyBooks tab, then click Connect.';
+            else
+              connectionError =
+                error instanceof Error ? error.message : 'The page connection failed.';
+            if (!checkpoint) throw new Error(connectionError, { cause: error });
+          } finally {
+            clearTimeout(timer);
+          }
+        } else if (checkpoint)
+          connectionError =
+            'The connected tab is unavailable or has left zyBooks. Stop this run and connect to a zyBooks section.';
+        if (!checkpoint)
+          throw new Error(
+            'No accessible zyBooks tab is selected. Select a section on learn.zybooks.com and allow ZyFlow site access, then click Connect.',
+          );
         return {
           ok: true,
           snapshot: checkpoint,
+          connectionError,
           activeTabId: tab?.id ?? null,
           preferences: await getPreferences(),
         };
@@ -166,6 +274,12 @@ export default defineBackground(() => {
       }
       if (!tab?.url || !allowed(tab.url) || routeKey(tab.url) !== routeKey(message.identity.route))
         throw new Error('The connected tab left this section.');
+      if (
+        message.type === 'command' &&
+        ['start', 'resume', 'retry', 'skip'].includes(message.command) &&
+        checkpoint.runnerVersion !== BUILD_VERSION
+      )
+        throw new Error(STALE_RUNNER_MESSAGE);
       if (
         message.type === 'command' &&
         ['start', 'resume', 'retry', 'skip'].includes(message.command) &&

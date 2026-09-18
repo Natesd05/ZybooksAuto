@@ -15,6 +15,7 @@ import { settingsProblem } from './settings';
 import { transition } from './state';
 import { waitFor } from './wait';
 import { nextHandoff, routeIdentity, routeKey } from '../navigation/routes';
+import { BUILD_VERSION } from './build';
 
 export type Save = (snapshot: Snapshot) => Promise<void>;
 export class Runner {
@@ -55,6 +56,7 @@ export class Runner {
           visited: [],
           compatible: registry.fixtureMode,
         };
+    this.snapshot.runnerVersion = BUILD_VERSION;
   }
   private set(state: RunState, action: string) {
     this.snapshot = transition(this.snapshot, state, action);
@@ -287,6 +289,13 @@ export class Runner {
             throw new Error('Activity action limit reached. Inspect the widget manually.');
           const plan = adapter.plan(before);
           if (!plan) throw new Error('The adapter has no action and no completion evidence.');
+          if (plan.operation === 'skip') {
+            adapter.execute(plan, context);
+            item.state = 'skipped';
+            item.reason = plan.description;
+            this.set('running', plan.description);
+            break;
+          }
           item.state = 'running';
           this.set('running', plan.description);
           await this.checkpoint();
@@ -304,11 +313,13 @@ export class Runner {
           before = await adapter.verify(before, context);
           this.pending = null;
           this.snapshot.uncertain = undefined;
-          this.set('running', 'Fresh activity evidence observed');
+          this.set('running', 'Checking the next activity action');
           await this.checkpoint(true);
         }
-        item.state = 'complete';
-        item.reason = undefined;
+        if (item.state !== 'skipped') {
+          item.state = 'complete';
+          item.reason = undefined;
+        }
         this.pending = null;
         this.snapshot.uncertain = undefined;
         await this.checkpoint(true);

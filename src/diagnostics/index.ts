@@ -1,10 +1,12 @@
 import type { Snapshot } from '../protocol/schema';
 import { participationRoots } from '../adapters/live';
+import { BUILD_VERSION } from '../core/build';
 /** Allowlisted export: no URL queries, DOM text, field values, site IDs or raw exceptions. */
 export function diagnostic(snapshot: Snapshot | null) {
   if (!snapshot) return { version: 1, status: 'disconnected' };
   return {
     version: 1,
+    runnerVersion: snapshot.runnerVersion ?? 'unknown',
     state: snapshot.state,
     compatible: snapshot.compatible,
     sequence: snapshot.seq,
@@ -18,6 +20,7 @@ export function diagnostic(snapshot: Snapshot | null) {
 export function inspectStructure(root: Document = document) {
   return {
     version: 1,
+    runnerVersion: BUILD_VERSION,
     date: new Date().toISOString().slice(0, 10),
     frames: root.querySelectorAll('iframe').length,
     participationCandidates: participationRoots(root).length,

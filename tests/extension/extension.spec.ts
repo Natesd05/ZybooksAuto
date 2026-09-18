@@ -1,8 +1,11 @@
 import { test, expect, chromium, type BrowserContext, type Page } from '@playwright/test';
 import path from 'node:path';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import type { Snapshot } from '../../src/protocol/schema';
+const BUILD_VERSION = JSON.parse(await readFile('package.json', 'utf8')).version;
+const STALE_RUNNER_MESSAGE =
+  'The zyBooks page is using an older runner. Refresh the zyBooks tab, then Connect and Resume.';
 let context: BrowserContext;
 let panel: Page;
 let page: Page;
@@ -10,11 +13,31 @@ let profile: string;
 let extensionId: string;
 test.beforeEach(async () => {
   profile = await mkdtemp(path.join(os.tmpdir(), 'zyflow-test-'));
-  const extension = path.resolve(
+  let extension = path.resolve(
     test.info().title.startsWith('production package')
       ? '.output/chrome-mv3'
       : '.output/chrome-mv3-fixture',
   );
+  if (
+    test.info().title.includes('missing page script') ||
+    test.info().title.includes('outdated page runner')
+  ) {
+    const copy = path.join(profile, 'extension');
+    await cp(extension, copy, { recursive: true });
+    const manifestPath = path.join(copy, 'manifest.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    // Reproduce a tab with host permission but no automatically installed page listener.
+    if (test.info().title.includes('missing page script')) delete manifest.content_scripts;
+    else {
+      const script = await readFile(path.join(copy, 'content-scripts/content.js'), 'utf8');
+      const old = script.replace(`version:\`${BUILD_VERSION}\``, 'version:`0.0.0`');
+      expect(old).not.toBe(script);
+      await writeFile(path.join(copy, 'legacy-content.js'), old);
+      manifest.content_scripts[0].js = ['legacy-content.js'];
+    }
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    extension = copy;
+  }
   context = await chromium.launchPersistentContext(profile, {
     channel: 'chromium',
     headless: true,
@@ -89,6 +112,118 @@ async function actions() {
 async function finished() {
   await expect(panel.getByTestId('run-state')).toHaveText('finished', { timeout: 15000 });
 }
+for (const runnerVersion of [undefined, '0.1.1']) {
+  test(`outdated runner ${runnerVersion ?? 'unversioned'} blocks execution until Connect repairs it`, async () => {
+    await setup();
+    await panel.evaluate(async (runnerVersion) => {
+      const checkpoint = (await chrome.storage.session.get('checkpoint')).checkpoint as Snapshot;
+      // Keep current-runner heartbeats from replacing this simulated legacy checkpoint.
+      await chrome.storage.session.set({
+        checkpoint: { ...checkpoint, runnerVersion, seq: checkpoint.seq + 1000 },
+      });
+    }, runnerVersion);
+    await expect(panel.getByRole('alert')).toHaveText(STALE_RUNNER_MESSAGE);
+    await expect(panel.getByRole('button', { name: 'Start run' })).toBeDisabled();
+    for (const command of ['start', 'resume', 'retry', 'skip']) {
+      expect(await rawCommand(command)).toMatchObject({ ok: false, error: STALE_RUNNER_MESSAGE });
+    }
+    expect(await actions()).toEqual([]);
+    const documentStart = await page.evaluate(() => performance.timeOrigin);
+    await panel.getByRole('button', { name: 'Connect', exact: true }).click();
+    await expect.poll(async () => (await snapshot()).runnerVersion).toBe(BUILD_VERSION);
+    await expect(panel.getByRole('button', { name: 'Start run' })).toBeEnabled();
+    await expect(panel.getByRole('alert')).toHaveCount(0);
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentStart);
+  });
+}
+test('Connect checks the page instead of reporting a saved checkpoint as connected', async () => {
+  await setup();
+  await page.goto('about:blank');
+  await panel.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect(panel.getByRole('status')).toContainText(
+    'connected tab is unavailable or has left zyBooks',
+  );
+  await expect(panel.getByRole('button', { name: 'Start run' })).toBeDisabled();
+  await expect(panel.getByRole('button', { name: 'Refresh connected page' })).toBeVisible();
+  expect((await snapshot()).identity.tabId).toBeTruthy();
+});
+
+for (const running of [false, true]) {
+  test(`Connect replaces an outdated page runner ${running ? 'during a pending action' : 'while idle'} without reloading`, async () => {
+    await page.goto('http://localhost:4173/zybook/demo/chapter/1/section/1?case=offline');
+    const worker = context.serviceWorkers()[0]!;
+    const stored = () =>
+      worker.evaluate(
+        async () => (await chrome.storage.session.get('checkpoint')).checkpoint as Snapshot,
+      );
+    await expect.poll(async () => (await stored())?.runnerVersion).toBe('0.0.0');
+    if (running) {
+      await worker.evaluate(async () => {
+        const state = (await chrome.storage.session.get('checkpoint')).checkpoint as Snapshot;
+        await chrome.tabs.sendMessage(
+          state.identity.tabId,
+          {
+            protocolVersion: 1,
+            requestId: crypto.randomUUID(),
+            type: 'command',
+            command: 'start',
+            runId: state.runId,
+            identity: state.identity,
+            settings: { ...state.settings, pauseHidden: false },
+          },
+          { documentId: state.identity.documentId },
+        );
+      });
+      await expect.poll(async () => (await stored()).state).toBe('waiting');
+    }
+    const previous = await stored();
+    const clicks = await actions();
+    const documentStart = await page.evaluate(() => performance.timeOrigin);
+    panel = await context.newPage();
+    await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+    await expect.poll(async () => (await stored()).runnerVersion).toBe(BUILD_VERSION);
+    await expect(panel.getByRole('alert')).toHaveCount(0);
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentStart);
+    const repaired = await stored();
+    expect(repaired.runId).toBe(previous.runId);
+    expect(repaired.state).toBe(running ? 'paused' : 'idle');
+    expect(repaired.uncertain).toEqual(previous.uncertain);
+    expect(repaired.items).toEqual(previous.items);
+    expect(await actions()).toEqual(clicks);
+    // A later heartbeat must come from the new context, not resurrect the old version.
+    await expect.poll(async () => (await stored()).seq).toBeGreaterThan(repaired.seq);
+    expect((await stored()).runnerVersion).toBe(BUILD_VERSION);
+    expect(await actions()).toEqual(clicks);
+  });
+}
+
+test('production package Connect repairs a missing page script without starting activities', async () => {
+  await page.route('https://learn.zybooks.com/**', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<!doctype html><button onclick="document.body.dataset.clicked=1">Start</button>',
+    }),
+  );
+  await page.goto('https://learn.zybooks.com/zybook/demo/chapter/1/section/1');
+  const worker = context.serviceWorkers()[0]!;
+  expect(
+    await worker.evaluate(async () => (await chrome.storage.session.get('checkpoint')).checkpoint),
+  ).toBeUndefined();
+  panel = await context.newPage();
+  await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+  await expect(panel.getByRole('button', { name: 'Connect', exact: true })).toBeEnabled();
+  await page.bringToFront();
+  await panel.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect(panel.getByRole('heading', { name: 'Section 1.1', exact: true })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Start run' })).toBeEnabled();
+  const first = await snapshot();
+  expect(first.runnerVersion).toBe(BUILD_VERSION);
+  expect(first.state).toBe('idle');
+  await panel.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Connect', exact: true })).toBeEnabled();
+  expect((await snapshot()).runId).toBe(first.runId);
+  expect(await page.locator('body').getAttribute('data-clicked')).toBeNull();
+});
 test('built extension executes all five families through its own event path', async () => {
   await setup();
   await panel.getByRole('button', { name: 'Start run' }).click();
@@ -282,7 +417,7 @@ test('production package loads but cannot execute synthetic selectors', async ()
   await page.route('https://learn.zybooks.com/**', (route) =>
     route.fulfill({
       contentType: 'text/html',
-      body: '<!doctype html><main data-zf-section="1.1" data-ready="true"><article class="participation" data-zf-activity="fake" data-kind="animation" data-category="participation"><button data-control="start" onclick="document.body.dataset.clicked=1">Start</button></article></main>',
+      body: '<!doctype html><main data-zf-section="1.1" data-ready="true"><article class="interactive-activity-container participation" data-zf-activity="fake" data-kind="animation" data-category="participation"><button data-control="start" onclick="document.body.dataset.clicked=1">Start</button></article></main>',
     }),
   );
   await page.goto('https://learn.zybooks.com/zybook/demo/chapter/1/section/1');
@@ -345,4 +480,44 @@ test('production package recognizes live boundaries and runs through real extens
   expect(
     await page.evaluate(() => (window as unknown as { liveActions: string[] }).liveActions),
   ).toEqual(['Start:false', 'Play:false', 'choice:0:false', 'choice:1:false']);
+});
+
+test('production package moves past exhausted choices and continues the activity queue', async () => {
+  const { liveActivity } = await import('../fixtures/live');
+  await page.route('https://learn.zybooks.com/**', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body:
+        '<!doctype html>' +
+        liveActivity('1', 'single_choice') +
+        liveActivity('2', 'single_choice') +
+        `<script>
+      window.choiceClicks = [];
+      document.querySelectorAll('input').forEach((input, index) => input.addEventListener('click', () => {
+        window.choiceClicks.push(index);
+        const root = input.closest('.interactive-activity-container');
+        root.querySelector('.zb-explanation').textContent = 'Feedback for choice ' + index;
+        if (index === 2) root.querySelector('.title-bar-chevron').setAttribute('aria-label', 'Activity completed');
+      }));
+    </script>`,
+    }),
+  );
+  await page.goto('https://learn.zybooks.com/zybook/demo/chapter/1/section/1');
+  await expect
+    .poll(() =>
+      context
+        .serviceWorkers()[0]!
+        .evaluate(async () => !!(await chrome.storage.session.get('checkpoint')).checkpoint),
+    )
+    .toBe(true);
+  panel = await context.newPage();
+  await panel.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+  await panel.getByLabel('Pause when the connected tab is hidden').uncheck();
+  await panel.getByRole('button', { name: 'Start run' }).click();
+  await finished();
+  expect((await snapshot()).items.map((item) => item.state)).toEqual(['skipped', 'complete']);
+  expect(
+    await page.evaluate(() => (window as unknown as { choiceClicks: number[] }).choiceClicks),
+  ).toEqual([0, 1, 2]);
+  await expect(panel.getByTestId('current-action')).toHaveText('Finished with 1 skipped');
 });

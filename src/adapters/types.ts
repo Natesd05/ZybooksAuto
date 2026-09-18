@@ -13,7 +13,7 @@ export interface Inspection {
 export interface Plan {
   ref: Ref;
   signature: string;
-  operation: 'click' | 'fill' | 'drop' | 'wait';
+  operation: 'click' | 'fill' | 'drop' | 'wait' | 'skip';
   target: string;
   values?: Record<string, string>;
   source?: string;

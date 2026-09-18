@@ -1,4 +1,4 @@
-import { waitFor } from '../core/wait';
+import { EvidenceTimeoutError, waitFor } from '../core/wait';
 import { fingerprint } from './fixture';
 import type { Adapter, Context, Inspection, Plan, Ref } from './types';
 
@@ -11,8 +11,8 @@ const radioSelector = '.question-choices[role="radiogroup"] input[type="radio"]'
 const controls = '.animation-player .animation-controls';
 
 export function participationRoots(root: ParentNode = document): HTMLElement[] {
-  return Array.from(root.querySelectorAll<HTMLElement>('.participation')).filter(
-    (element) => !element.parentElement?.closest('.participation'),
+  return Array.from(root.querySelectorAll<HTMLElement>(LIVE_BOUNDARY)).filter(
+    (element) => !element.parentElement?.closest(LIVE_BOUNDARY),
   );
 }
 
@@ -145,25 +145,29 @@ function planAnimation(before: Inspection): Plan {
 
 export function liveAdapter(kind: 'animation' | 'single_choice', timeout = 8000): Adapter {
   const attempts = new Map<string, Set<number>>();
+  const completionWaitExpired = new Set<string>();
   function planChoice(before: Inspection): Plan {
     const all = questions(before.root);
-    const index = all.findIndex(
-      (question) => status(question, questionStatus) !== 'Question completed',
-    );
-    if (index < 0)
+    let incomplete = false;
+    for (const [index, question] of all.entries()) {
+      if (status(question, questionStatus) === 'Question completed') continue;
+      incomplete = true;
+      const options = Array.from(question.querySelectorAll<HTMLInputElement>(radioSelector));
+      const key = `${before.ref.id}:${index}:${options[0]!.name}`;
+      const tried = attempts.get(key) ?? new Set<number>();
+      const choice = options.findIndex((input, i) => enabled(input) && !tried.has(i));
+      if (choice >= 0)
+        return planFor(before, `${index}:${choice}`, 'Try the next participation choice once');
+      if (options.some((_, i) => !tried.has(i)))
+        throw new Error('The remaining choices are disabled or unavailable.');
+    }
+    if (!incomplete && !completionWaitExpired.has(before.ref.id))
       return planFor(before, 'completion', 'Wait for the activity completion indicator', 'wait');
-    const question = all[index]!;
-    const options = Array.from(question.querySelectorAll<HTMLInputElement>(radioSelector));
-    const key = `${before.ref.id}:${options[0]!.name}`;
-    const tried = attempts.get(key) ?? new Set<number>();
-    const choice = options.findIndex(
-      (input, i) => enabled(input) && !input.checked && !tried.has(i),
-    );
-    if (choice < 0) throw new Error('No untried choices remain. Inspect this question manually.');
     return planFor(
       before,
-      `${index}:${choice}`,
-      'Submit one participation choice and wait for fresh feedback',
+      'exhausted',
+      'Available choices tried once; completion not verified. Automatically skipped.',
+      'skip',
     );
   }
   return {
@@ -178,7 +182,7 @@ export function liveAdapter(kind: 'animation' | 'single_choice', timeout = 8000)
       const before = inspect(plan.ref);
       if (before.signature !== plan.signature)
         throw new Error('The activity changed. The stale action was rejected.');
-      if (plan.operation === 'wait') return;
+      if (plan.operation === 'wait' || plan.operation === 'skip') return;
       if (plan.operation !== 'click') throw new Error('Unsupported live action.');
       let target: HTMLElement | undefined;
       if (kind === 'animation') {
@@ -194,7 +198,7 @@ export function liveAdapter(kind: 'animation' | 'single_choice', timeout = 8000)
           : [];
         target = options[choice!];
         if (target && question && status(question, questionStatus) !== 'Question completed') {
-          const key = `${plan.ref.id}:${options[0]!.name}`;
+          const key = `${plan.ref.id}:${q}:${options[0]!.name}`;
           const tried = attempts.get(key) ?? new Set<number>();
           if (tried.has(choice!)) throw new Error('This choice was already attempted.');
           tried.add(choice!);
@@ -218,6 +222,11 @@ export function liveAdapter(kind: 'animation' | 'single_choice', timeout = 8000)
         },
         context.signal,
         kind === 'animation' ? Math.max(timeout, 120000) : timeout,
-      ),
+      ).catch((error) => {
+        if (kind !== 'single_choice' || !(error instanceof EvidenceTimeoutError)) throw error;
+        context.assertCurrent();
+        completionWaitExpired.add(before.ref.id);
+        return inspect(before.ref);
+      }),
   };
 }
