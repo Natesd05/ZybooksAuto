@@ -13,7 +13,6 @@ npm ci
 npm run check
 npm run zip
 ```
-
 Load the production build:
 
 1. Open `chrome://extensions` in Chrome 116 or later.
