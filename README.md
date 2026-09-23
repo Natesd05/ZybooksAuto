@@ -1,9 +1,5 @@
 # ZyFlow
 
-A Chrome Manifest V3 extension with a persistent React side panel, one cancellable activity runner, verified page evidence, and explicit manual handoff.
-
-**Status: 0.1.7 engineering preview with live animation and single-choice adapters.** Current zyBooks activity boundaries, completion indicators, animation playback controls, and radio feedback were inspected in Chrome on September 14, 2026. The production runner recognizes previously completed work and executes the supported controls. Short answers, matching, ordered blocks, and automatic live section navigation still require integration; unknown widgets stop for inspection. See [the compatibility matrix](docs/compatibility.md) for evidence and limits. No store publication has been performed.
-
 ## Setup
 
 Use Node **24** and npm. Dependencies are pinned in `package-lock.json`.
